@@ -1,0 +1,2 @@
+-- This is a seed migration, rollback not needed
+-- Permissions will be recreated on next migration

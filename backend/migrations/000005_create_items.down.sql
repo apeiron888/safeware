@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS item_locations CASCADE;
+DROP TABLE IF EXISTS items CASCADE;
+DROP TYPE IF EXISTS classification_level;
