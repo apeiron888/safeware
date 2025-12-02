@@ -46,5 +46,8 @@ func Close() error {
 
 // Helper function to get a collection
 func GetCollection(name string) *mongo.Collection {
+	if Database == nil {
+		log.Fatal("Database connection is not initialized")
+	}
 	return Database.Collection(name)
 }

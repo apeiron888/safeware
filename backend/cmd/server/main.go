@@ -19,7 +19,9 @@ func main() {
 	cfg := config.Load()
 
 	// Connect to database
-	database.ConnectMongoDB(cfg.Database.URI, cfg.Database.Database)
+	if err := database.ConnectMongoDB(cfg.Database.URI, cfg.Database.Database); err != nil {
+		log.Fatalf("Failed to connect to MongoDB: %v", err)
+	}
 	defer database.Close()
 
 	// Set Gin mode
