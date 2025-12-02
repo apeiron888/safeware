@@ -64,16 +64,20 @@ func main() {
 
 	// CORS middleware
 	router.Use(func(c *gin.Context) {
-		// Get allowed origin from environment or use default
-		allowedOrigin := os.Getenv("ALLOWED_ORIGIN")
-		if allowedOrigin == "" {
-			allowedOrigin = "*" // Default to allow all for development
+		// Get the origin from the request
+		origin := c.Request.Header.Get("Origin")
+
+		// If no origin header (e.g. server-to-server), default to * or skip
+		if origin == "" {
+			origin = "*"
 		}
 
-		c.Writer.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+		// Allow all origins by reflecting the request origin
+		// This is required when Access-Control-Allow-Credentials is true
+		c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, PATCH, DELETE")
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
