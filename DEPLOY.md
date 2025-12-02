@@ -71,7 +71,7 @@ VITE_API_URL=https://your-backend-name.onrender.com/api/v1
 ### Update CORS on Render
 Add to environment variables:
 ```
-ALLOWED_ORIGIN=https://your-app.vercel.app
+ALLOWED_ORIGIN=https://safeware-weld.vercel.app
 ```
 
 ### Test
