@@ -380,7 +380,7 @@ For questions or issues:
 
 <div align="center">
 
-**Built with ❤️ for secure inventory management**
+**Purpose-built for secure inventory management**
 
 Go • React • TypeScript • MongoDB
 
