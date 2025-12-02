@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: safeware-backend
+    env: go
+    region: oregon
+    buildCommand: go build -o bin/server ./cmd/server
+    startCommand: ./bin/server
+    envVars:
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: GIN_MODE
+        value: release
+      - key: PORT
+        value: "8080"
