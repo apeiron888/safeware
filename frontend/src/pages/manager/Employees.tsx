@@ -25,7 +25,6 @@ interface Warehouse {
 const Employees: React.FC = () => {
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-    const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedRole, setSelectedRole] = useState<'Supervisor' | 'Staff' | 'Auditor'>('Staff');
     const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
@@ -39,8 +38,6 @@ const Employees: React.FC = () => {
         } catch (error) {
             console.error("Failed to fetch employees", error);
             setEmployees([]);
-        } finally {
-            setLoading(false);
         }
     };
 

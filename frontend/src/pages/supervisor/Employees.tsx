@@ -17,7 +17,6 @@ interface Employee {
 
 const SupervisorEmployees: React.FC = () => {
     const [employees, setEmployees] = useState<Employee[]>([]);
-    const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedRole, setSelectedRole] = useState<'Supervisor' | 'Staff'>('Staff');
     const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
@@ -31,8 +30,6 @@ const SupervisorEmployees: React.FC = () => {
         } catch (error) {
             console.error("Failed to fetch employees", error);
             setEmployees([]);
-        } finally {
-            setLoading(false);
         }
     };
 

@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { jwtDecode } from 'jwt-decode';
 import api from '../services/api';
 import { User, LoginResponse } from '../types/auth';
 
@@ -24,7 +23,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 try {
                     // Decode token to get user info (assuming claims are in token)
                     // Or fetch profile from backend
-                    const decoded: any = jwtDecode(token);
+                    // const decoded: any = jwtDecode(token);
 
                     // For MVP, we might need to fetch the full profile if token doesn't have everything
                     // But let's try to use what we have or fetch /users/me
