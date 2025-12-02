@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/a2sv/safeware/internal/audit"
 	"github.com/a2sv/safeware/internal/auth"
 	"github.com/a2sv/safeware/internal/database"
 	"github.com/a2sv/safeware/internal/models"
@@ -13,10 +14,14 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-type ManagerHandler struct{}
+type ManagerHandler struct {
+	auditService *audit.AuditService
+}
 
-func NewManagerHandler() *ManagerHandler {
-	return &ManagerHandler{}
+func NewManagerHandler(auditService *audit.AuditService) *ManagerHandler {
+	return &ManagerHandler{
+		auditService: auditService,
+	}
 }
 
 type CreateEmployeeRequest struct {
@@ -30,11 +35,18 @@ type CreateEmployeeRequest struct {
 func (h *ManagerHandler) CreateEmployee(role string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		companyID := c.GetString("company_id")
+		userID := c.GetString("user_id")
+		username := c.GetString("username")
 
 		var req CreateEmployeeRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
+		}
+
+		// If Supervisor, force warehouse ID
+		if c.GetString("role") == "Supervisor" {
+			req.WarehouseID = c.GetString("warehouse_id")
 		}
 
 		// Validate warehouse for Staff/Supervisor
@@ -76,6 +88,7 @@ func (h *ManagerHandler) CreateEmployee(role string) gin.HandlerFunc {
 		}
 
 		companyObjectID, _ := primitive.ObjectIDFromHex(companyID)
+		managerObjectID, _ := primitive.ObjectIDFromHex(userID)
 
 		user := models.User{
 			ID:             primitive.NewObjectID(),
@@ -112,6 +125,25 @@ func (h *ManagerHandler) CreateEmployee(role string) gin.HandlerFunc {
 			whCollection := database.GetCollection("warehouses")
 			whCollection.UpdateOne(ctx, bson.M{"_id": *warehouseObjectID}, bson.M{"$set": bson.M{"supervisor_id": user.ID}})
 		}
+
+		// Log audit
+		go h.auditService.LogAction(
+			context.Background(),
+			managerObjectID,
+			companyObjectID,
+			username,
+			"CREATE",
+			"EMPLOYEE",
+			&user.ID,
+			map[string]interface{}{
+				"role":         role,
+				"email":        user.Email,
+				"warehouse_id": req.WarehouseID,
+			},
+			c.ClientIP(),
+			c.Request.UserAgent(),
+			"SUCCESS",
+		)
 
 		c.JSON(http.StatusCreated, gin.H{
 			"message": role + " created successfully",
@@ -171,6 +203,8 @@ type UpdateEmployeeRequest struct {
 // UpdateEmployee handles updating employee details
 func (h *ManagerHandler) UpdateEmployee(c *gin.Context) {
 	companyID := c.GetString("company_id")
+	userID := c.GetString("user_id")
+	username := c.GetString("username")
 	employeeID := c.Param("id")
 
 	var req UpdateEmployeeRequest
@@ -186,6 +220,7 @@ func (h *ManagerHandler) UpdateEmployee(c *gin.Context) {
 	}
 
 	companyObjectID, _ := primitive.ObjectIDFromHex(companyID)
+	managerObjectID, _ := primitive.ObjectIDFromHex(userID)
 
 	ctx := context.Background()
 	usersCollection := database.GetCollection("users")
@@ -198,18 +233,44 @@ func (h *ManagerHandler) UpdateEmployee(c *gin.Context) {
 	if req.Email != "" {
 		update["$set"].(bson.M)["email"] = req.Email
 	}
-	if req.WarehouseID != "" {
+	if req.WarehouseID != "" && c.GetString("role") != "Supervisor" {
 		warehouseObjID, err := primitive.ObjectIDFromHex(req.WarehouseID)
 		if err == nil {
 			update["$set"].(bson.M)["warehouse_id"] = warehouseObjID
 		}
 	}
 
-	result, err := usersCollection.UpdateOne(ctx, bson.M{"_id": employeeObjectID, "company_id": companyObjectID}, update)
+	filter := bson.M{"_id": employeeObjectID, "company_id": companyObjectID}
+	if c.GetString("role") == "Supervisor" {
+		whID := c.GetString("warehouse_id")
+		if whID != "" {
+			whObjID, _ := primitive.ObjectIDFromHex(whID)
+			filter["warehouse_id"] = whObjID
+		}
+	}
+
+	result, err := usersCollection.UpdateOne(ctx, filter, update)
 	if err != nil || result.MatchedCount == 0 {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Employee not found"})
 		return
 	}
+
+	// Log audit
+	go h.auditService.LogAction(
+		context.Background(),
+		managerObjectID,
+		companyObjectID,
+		username,
+		"UPDATE",
+		"EMPLOYEE",
+		&employeeObjectID,
+		map[string]interface{}{
+			"updates": req,
+		},
+		c.ClientIP(),
+		c.Request.UserAgent(),
+		"SUCCESS",
+	)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Employee updated successfully"})
 }
@@ -217,6 +278,8 @@ func (h *ManagerHandler) UpdateEmployee(c *gin.Context) {
 // DeleteEmployee handles employee deletion
 func (h *ManagerHandler) DeleteEmployee(c *gin.Context) {
 	companyID := c.GetString("company_id")
+	userID := c.GetString("user_id")
+	username := c.GetString("username")
 	employeeID := c.Param("id")
 
 	employeeObjectID, err := primitive.ObjectIDFromHex(employeeID)
@@ -226,16 +289,41 @@ func (h *ManagerHandler) DeleteEmployee(c *gin.Context) {
 	}
 
 	companyObjectID, _ := primitive.ObjectIDFromHex(companyID)
+	managerObjectID, _ := primitive.ObjectIDFromHex(userID)
 
 	ctx := context.Background()
 	usersCollection := database.GetCollection("users")
 
 	// Delete the employee
-	result, err := usersCollection.DeleteOne(ctx, bson.M{"_id": employeeObjectID, "company_id": companyObjectID})
+	filter := bson.M{"_id": employeeObjectID, "company_id": companyObjectID}
+	if c.GetString("role") == "Supervisor" {
+		whID := c.GetString("warehouse_id")
+		if whID != "" {
+			whObjID, _ := primitive.ObjectIDFromHex(whID)
+			filter["warehouse_id"] = whObjID
+		}
+	}
+
+	result, err := usersCollection.DeleteOne(ctx, filter)
 	if err != nil || result.DeletedCount == 0 {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Employee not found"})
 		return
 	}
+
+	// Log audit
+	go h.auditService.LogAction(
+		context.Background(),
+		managerObjectID,
+		companyObjectID,
+		username,
+		"DELETE",
+		"EMPLOYEE",
+		&employeeObjectID,
+		nil,
+		c.ClientIP(),
+		c.Request.UserAgent(),
+		"SUCCESS",
+	)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Employee deleted successfully"})
 }

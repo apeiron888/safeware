@@ -40,13 +40,13 @@ func main() {
 	auditService := audit.NewAuditService(cfg.JWT.Secret) // Using JWT secret as encryption key for MVP
 
 	// Initialize handlers
-	authHandler := handlers.NewAuthHandler(jwtService, emailService)
-	warehouseHandler := handlers.NewWarehouseHandler()
-	itemHandler := handlers.NewItemHandler()
+	authHandler := handlers.NewAuthHandler(jwtService, emailService, auditService)
+	warehouseHandler := handlers.NewWarehouseHandler(auditService)
+	itemHandler := handlers.NewItemHandler(auditService)
 	// roleHandler := handlers.NewRoleHandler()
 	// permissionHandler := handlers.NewPermissionHandler()
 	// userHandler := handlers.NewUserHandler()
-	managerHandler := handlers.NewManagerHandler()
+	managerHandler := handlers.NewManagerHandler(auditService)
 	auditHandler := handlers.NewAuditHandler(auditService)
 
 	// Seed default permissions (run once on startup)
@@ -145,8 +145,14 @@ func main() {
 			supervisor.Use(middleware.WarehouseEnforcementMiddleware())
 			{
 				// Staff Management (Own Warehouse)
-				supervisor.POST("/staff/create", managerHandler.CreateEmployee("Staff")) // Reusing logic, but need to ensure warehouse restriction
-				// Note: managerHandler.CreateEmployee might need adjustment to allow Supervisors to create Staff for THEIR warehouse only
+				supervisor.POST("/staff/create", managerHandler.CreateEmployee("Staff"))
+				supervisor.POST("/staff/update/:id", managerHandler.UpdateEmployee)
+				supervisor.DELETE("/staff/delete/:id", managerHandler.DeleteEmployee)
+
+				// Supervisor Management (Own Warehouse - Promote/Demote)
+				supervisor.POST("/supervisor/create", managerHandler.CreateEmployee("Supervisor"))
+				supervisor.POST("/supervisor/update/:id", managerHandler.UpdateEmployee)
+				supervisor.DELETE("/supervisor/delete/:id", managerHandler.DeleteEmployee)
 
 				// Item Management (Own Warehouse)
 				supervisor.POST("/item/add", itemHandler.Create)
@@ -154,6 +160,7 @@ func main() {
 				supervisor.DELETE("/item/remove/:id", itemHandler.Delete)
 				supervisor.GET("/items", itemHandler.List)
 				supervisor.GET("/item/:id", itemHandler.Get)
+				supervisor.GET("/employees", managerHandler.ListWarehouseEmployees)
 			}
 
 			// STAFF ROUTES (Warehouse Bound + Time Restricted)

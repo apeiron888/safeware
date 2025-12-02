@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/a2sv/safeware/internal/audit"
 	"github.com/a2sv/safeware/internal/database"
 	"github.com/a2sv/safeware/internal/models"
 	"github.com/gin-gonic/gin"
@@ -13,10 +14,14 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-type ItemHandler struct{}
+type ItemHandler struct {
+	auditService *audit.AuditService
+}
 
-func NewItemHandler() *ItemHandler {
-	return &ItemHandler{}
+func NewItemHandler(auditService *audit.AuditService) *ItemHandler {
+	return &ItemHandler{
+		auditService: auditService,
+	}
 }
 
 type CreateItemRequest struct {
@@ -26,9 +31,15 @@ type CreateItemRequest struct {
 	Price       float64                `json:"price"`
 	Department  string                 `json:"department"`
 	Attributes  map[string]interface{} `json:"attributes"`
-	WarehouseID string                 `json:"warehouse_id" binding:"required"`
+	WarehouseID string                 `json:"warehouse_id"` // Optional binding, validated manually
 	Quantity    int                    `json:"quantity" binding:"required,min=0"`
 	Batch       string                 `json:"batch"`
+}
+
+type ItemResponse struct {
+	models.Item `bson:",inline"`
+	Quantity    int    `bson:"quantity" json:"quantity"`
+	Batch       string `bson:"batch" json:"batch"`
 }
 
 type UpdateItemRequest struct {
@@ -43,6 +54,12 @@ type UpdateItemRequest struct {
 func (h *ItemHandler) List(c *gin.Context) {
 	companyID := c.GetString("company_id")
 	warehouseID := c.Param("id")
+
+	// If Supervisor or Staff, force warehouse ID
+	role := c.GetString("role")
+	if role == "Supervisor" || role == "Staff" {
+		warehouseID = c.GetString("warehouse_id")
+	}
 
 	if companyID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
@@ -133,7 +150,7 @@ func (h *ItemHandler) List(c *gin.Context) {
 	}
 	defer cursor.Close(ctx)
 
-	var items []bson.M
+	var items []ItemResponse
 	if err = cursor.All(ctx, &items); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode items"})
 		return
@@ -184,6 +201,7 @@ func (h *ItemHandler) Get(c *gin.Context) {
 func (h *ItemHandler) Create(c *gin.Context) {
 	companyID := c.GetString("company_id")
 	userID := c.GetString("user_id")
+	username := c.GetString("username")
 	if companyID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
@@ -192,6 +210,17 @@ func (h *ItemHandler) Create(c *gin.Context) {
 	var req CreateItemRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// If Supervisor or Staff, force warehouse ID
+	role := c.GetString("role")
+	if role == "Supervisor" || role == "Staff" {
+		req.WarehouseID = c.GetString("warehouse_id")
+	}
+
+	if req.WarehouseID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Warehouse ID is required"})
 		return
 	}
 
@@ -247,12 +276,34 @@ func (h *ItemHandler) Create(c *gin.Context) {
 		return
 	}
 
+	// Log audit
+	go h.auditService.LogAction(
+		context.Background(),
+		ownerObjectID,
+		companyObjectID,
+		username,
+		"CREATE",
+		"ITEM",
+		&item.ID,
+		map[string]interface{}{
+			"sku":          item.SKU,
+			"name":         item.Name,
+			"warehouse_id": req.WarehouseID,
+			"quantity":     req.Quantity,
+		},
+		c.ClientIP(),
+		c.Request.UserAgent(),
+		"SUCCESS",
+	)
+
 	c.JSON(http.StatusCreated, item)
 }
 
 // Update updates an existing item
 func (h *ItemHandler) Update(c *gin.Context) {
 	companyID := c.GetString("company_id")
+	userID := c.GetString("user_id")
+	username := c.GetString("username")
 	itemID := c.Param("id")
 
 	var req UpdateItemRequest
@@ -268,6 +319,7 @@ func (h *ItemHandler) Update(c *gin.Context) {
 	}
 
 	companyObjectID, _ := primitive.ObjectIDFromHex(companyID)
+	userObjectID, _ := primitive.ObjectIDFromHex(userID)
 
 	// Build update document
 	update := bson.M{"$set": bson.M{"updated_at": time.Now()}}
@@ -300,12 +352,31 @@ func (h *ItemHandler) Update(c *gin.Context) {
 	var item models.Item
 	collection.FindOne(ctx, bson.M{"_id": objectID}).Decode(&item)
 
+	// Log audit
+	go h.auditService.LogAction(
+		context.Background(),
+		userObjectID,
+		companyObjectID,
+		username,
+		"UPDATE",
+		"ITEM",
+		&objectID,
+		map[string]interface{}{
+			"updates": req,
+		},
+		c.ClientIP(),
+		c.Request.UserAgent(),
+		"SUCCESS",
+	)
+
 	c.JSON(http.StatusOK, item)
 }
 
 // Delete archives an item
 func (h *ItemHandler) Delete(c *gin.Context) {
 	companyID := c.GetString("company_id")
+	userID := c.GetString("user_id")
+	username := c.GetString("username")
 	itemID := c.Param("id")
 
 	objectID, err := primitive.ObjectIDFromHex(itemID)
@@ -315,6 +386,7 @@ func (h *ItemHandler) Delete(c *gin.Context) {
 	}
 
 	companyObjectID, _ := primitive.ObjectIDFromHex(companyID)
+	userObjectID, _ := primitive.ObjectIDFromHex(userID)
 
 	ctx := context.Background()
 	collection := database.GetCollection("items")
@@ -325,6 +397,21 @@ func (h *ItemHandler) Delete(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Item not found"})
 		return
 	}
+
+	// Log audit
+	go h.auditService.LogAction(
+		context.Background(),
+		userObjectID,
+		companyObjectID,
+		username,
+		"DELETE",
+		"ITEM",
+		&objectID,
+		nil,
+		c.ClientIP(),
+		c.Request.UserAgent(),
+		"SUCCESS",
+	)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Item archived successfully"})
 }

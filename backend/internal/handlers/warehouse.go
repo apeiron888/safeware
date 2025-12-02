@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/a2sv/safeware/internal/audit"
 	"github.com/a2sv/safeware/internal/database"
 	"github.com/a2sv/safeware/internal/models"
 	"github.com/gin-gonic/gin"
@@ -13,10 +14,14 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-type WarehouseHandler struct{}
+type WarehouseHandler struct {
+	auditService *audit.AuditService
+}
 
-func NewWarehouseHandler() *WarehouseHandler {
-	return &WarehouseHandler{}
+func NewWarehouseHandler(auditService *audit.AuditService) *WarehouseHandler {
+	return &WarehouseHandler{
+		auditService: auditService,
+	}
 }
 
 type CreateWarehouseRequest struct {
@@ -63,6 +68,8 @@ func (h *WarehouseHandler) List(c *gin.Context) {
 // Get returns a single warehouse by ID
 func (h *WarehouseHandler) Get(c *gin.Context) {
 	companyID := c.GetString("company_id")
+	userID := c.GetString("user_id")
+	username := c.GetString("username")
 	warehouseID := c.Param("id")
 
 	ctx := context.Background()
@@ -75,6 +82,8 @@ func (h *WarehouseHandler) Get(c *gin.Context) {
 	}
 
 	companyObjectID, _ := primitive.ObjectIDFromHex(companyID)
+	userObjectID, _ := primitive.ObjectIDFromHex(userID)
+
 	var warehouse models.Warehouse
 	err = collection.FindOne(ctx, bson.M{"_id": objectID, "company_id": companyObjectID}).Decode(&warehouse)
 	if err != nil {
@@ -86,12 +95,32 @@ func (h *WarehouseHandler) Get(c *gin.Context) {
 		return
 	}
 
+	// Log audit for reading warehouse details
+	go h.auditService.LogAction(
+		context.Background(),
+		userObjectID,
+		companyObjectID,
+		username,
+		"READ",
+		"WAREHOUSE",
+		&objectID,
+		map[string]interface{}{
+			"warehouse_name": warehouse.Name,
+		},
+		c.ClientIP(),
+		c.Request.UserAgent(),
+		"SUCCESS",
+	)
+
 	c.JSON(http.StatusOK, warehouse)
 }
 
 // Create creates a new warehouse
 func (h *WarehouseHandler) Create(c *gin.Context) {
 	companyID := c.GetString("company_id")
+	userID := c.GetString("user_id")
+	username := c.GetString("username")
+
 	if companyID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
@@ -104,6 +133,7 @@ func (h *WarehouseHandler) Create(c *gin.Context) {
 	}
 
 	companyObjectID, _ := primitive.ObjectIDFromHex(companyID)
+	userObjectID, _ := primitive.ObjectIDFromHex(userID)
 
 	warehouse := models.Warehouse{
 		ID:          primitive.NewObjectID(),
@@ -125,12 +155,32 @@ func (h *WarehouseHandler) Create(c *gin.Context) {
 		return
 	}
 
+	// Log audit
+	go h.auditService.LogAction(
+		context.Background(),
+		userObjectID,
+		companyObjectID,
+		username,
+		"CREATE",
+		"WAREHOUSE",
+		&warehouse.ID,
+		map[string]interface{}{
+			"name":     warehouse.Name,
+			"location": warehouse.Location,
+		},
+		c.ClientIP(),
+		c.Request.UserAgent(),
+		"SUCCESS",
+	)
+
 	c.JSON(http.StatusCreated, warehouse)
 }
 
 // Update updates an existing warehouse
 func (h *WarehouseHandler) Update(c *gin.Context) {
 	companyID := c.GetString("company_id")
+	userID := c.GetString("user_id")
+	username := c.GetString("username")
 	warehouseID := c.Param("id")
 
 	var req UpdateWarehouseRequest
@@ -146,6 +196,7 @@ func (h *WarehouseHandler) Update(c *gin.Context) {
 	}
 
 	companyObjectID, _ := primitive.ObjectIDFromHex(companyID)
+	userObjectID, _ := primitive.ObjectIDFromHex(userID)
 
 	// Build update document
 	update := bson.M{"$set": bson.M{"updated_at": time.Now()}}
@@ -175,12 +226,31 @@ func (h *WarehouseHandler) Update(c *gin.Context) {
 	var warehouse models.Warehouse
 	collection.FindOne(ctx, bson.M{"_id": objectID}).Decode(&warehouse)
 
+	// Log audit
+	go h.auditService.LogAction(
+		context.Background(),
+		userObjectID,
+		companyObjectID,
+		username,
+		"UPDATE",
+		"WAREHOUSE",
+		&objectID,
+		map[string]interface{}{
+			"updates": req,
+		},
+		c.ClientIP(),
+		c.Request.UserAgent(),
+		"SUCCESS",
+	)
+
 	c.JSON(http.StatusOK, warehouse)
 }
 
 // Delete soft deletes a warehouse
 func (h *WarehouseHandler) Delete(c *gin.Context) {
 	companyID := c.GetString("company_id")
+	userID := c.GetString("user_id")
+	username := c.GetString("username")
 	warehouseID := c.Param("id")
 
 	objectID, err := primitive.ObjectIDFromHex(warehouseID)
@@ -190,6 +260,7 @@ func (h *WarehouseHandler) Delete(c *gin.Context) {
 	}
 
 	companyObjectID, _ := primitive.ObjectIDFromHex(companyID)
+	userObjectID, _ := primitive.ObjectIDFromHex(userID)
 
 	ctx := context.Background()
 	collection := database.GetCollection("warehouses")
@@ -200,6 +271,21 @@ func (h *WarehouseHandler) Delete(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Warehouse not found"})
 		return
 	}
+
+	// Log audit
+	go h.auditService.LogAction(
+		context.Background(),
+		userObjectID,
+		companyObjectID,
+		username,
+		"DELETE",
+		"WAREHOUSE",
+		&objectID,
+		nil,
+		c.ClientIP(),
+		c.Request.UserAgent(),
+		"SUCCESS",
+	)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Warehouse deleted successfully"})
 }

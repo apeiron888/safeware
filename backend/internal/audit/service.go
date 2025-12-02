@@ -15,6 +15,7 @@ import (
 	"github.com/a2sv/safeware/internal/database"
 	"github.com/a2sv/safeware/internal/models"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type AuditService struct {
@@ -153,12 +154,18 @@ func (s *AuditService) GetLogs(ctx context.Context, companyID primitive.ObjectID
 		"company_id": companyID,
 	}
 
-	// Apply additional filters
+	// Apply additional filters with case-insensitive regex
 	if action, ok := filter["action"].(string); ok && action != "" {
-		query["action"] = action
+		query["action"] = map[string]interface{}{
+			"$regex":   action,
+			"$options": "i", // case-insensitive
+		}
 	}
 	if resourceType, ok := filter["resource_type"].(string); ok && resourceType != "" {
-		query["resource_type"] = resourceType
+		query["resource_type"] = map[string]interface{}{
+			"$regex":   resourceType,
+			"$options": "i", // case-insensitive
+		}
 	}
 	if userID, ok := filter["user_id"].(string); ok && userID != "" {
 		oid, err := primitive.ObjectIDFromHex(userID)
@@ -187,7 +194,11 @@ func (s *AuditService) GetLogs(ctx context.Context, companyID primitive.ObjectID
 		}
 	}
 
-	cursor, err := collection.Find(ctx, query)
+	// Create find options with sorting (most recent first)
+	findOptions := options.Find()
+	findOptions.SetSort(map[string]interface{}{"created_at": -1}) // Sort descending
+
+	cursor, err := collection.Find(ctx, query, findOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +222,7 @@ func (s *AuditService) GetLogs(ctx context.Context, companyID primitive.ObjectID
 			"status":        logEntry.Status,
 			"ip_address":    logEntry.IPAddress,
 			"user_agent":    logEntry.UserAgent,
-			"created_at":    logEntry.CreatedAt,
+			"timestamp":     logEntry.CreatedAt, // Changed to "timestamp" to match frontend
 		}
 
 		if logEntry.DetailsEncrypted != "" {

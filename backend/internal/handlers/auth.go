@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/a2sv/safeware/internal/audit"
 	"github.com/a2sv/safeware/internal/auth"
 	"github.com/a2sv/safeware/internal/database"
 	"github.com/a2sv/safeware/internal/email"
@@ -18,12 +19,14 @@ import (
 type AuthHandler struct {
 	jwtService   *auth.JWTService
 	emailService *email.EmailService
+	auditService *audit.AuditService
 }
 
-func NewAuthHandler(jwtService *auth.JWTService, emailService *email.EmailService) *AuthHandler {
+func NewAuthHandler(jwtService *auth.JWTService, emailService *email.EmailService, auditService *audit.AuditService) *AuthHandler {
 	return &AuthHandler{
 		jwtService:   jwtService,
 		emailService: emailService,
+		auditService: auditService,
 	}
 }
 
@@ -178,13 +181,28 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	// Verify password
 	if !auth.VerifyPassword(user.PasswordHash, req.Password) {
+		// Log failed login audit
+		go h.auditService.LogAction(
+			context.Background(),
+			user.ID,
+			user.CompanyID,
+			user.FullName,
+			"LOGIN",
+			"USER",
+			&user.ID,
+			map[string]interface{}{
+				"email": user.Email,
+				"role":  user.Role,
+			},
+			c.ClientIP(),
+			c.Request.UserAgent(),
+			"FAILED",
+		)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
 		return
 	}
 
 	// Generate tokens
-	// Note: We should update JWT service to include role and warehouse_id in claims
-	// For now, we'll keep using the existing signature but we need to update it
 	accessToken, err := h.jwtService.GenerateAccessToken(
 		user.ID.Hex(),
 		user.CompanyID.Hex(),
@@ -208,6 +226,24 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	usersCollection.UpdateOne(ctx, bson.M{"_id": user.ID}, bson.M{
 		"$set": bson.M{"last_login": now},
 	})
+
+	// Log successful login audit
+	go h.auditService.LogAction(
+		context.Background(),
+		user.ID,
+		user.CompanyID,
+		user.FullName,
+		"LOGIN",
+		"USER",
+		&user.ID,
+		map[string]interface{}{
+			"email": user.Email,
+			"role":  user.Role,
+		},
+		c.ClientIP(),
+		c.Request.UserAgent(),
+		"SUCCESS",
+	)
 
 	var warehouseID string
 	if user.WarehouseID != nil {
