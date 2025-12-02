@@ -79,7 +79,7 @@ func main() {
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"status":   "ok",
-			"message":  "SIMS API with MongoDB is running!",
+			"message":  "SafeWare API with MongoDB is running!",
 			"database": "MongoDB Atlas",
 			"version":  "1.0.0-mvp",
 		})
@@ -112,6 +112,17 @@ func main() {
 				manager.POST("/staff/create", managerHandler.CreateEmployee("Staff"))
 				manager.POST("/supervisor/create", managerHandler.CreateEmployee("Supervisor"))
 				manager.POST("/auditor/create", managerHandler.CreateEmployee("Auditor"))
+
+				// Employee Update & Delete
+				manager.POST("/staff/update/:id", managerHandler.UpdateEmployee)
+				manager.POST("/supervisor/update/:id", managerHandler.UpdateEmployee)
+				manager.POST("/auditor/update/:id", managerHandler.UpdateEmployee)
+
+				manager.DELETE("/staff/delete/:id", managerHandler.DeleteEmployee)
+				manager.DELETE("/supervisor/delete/:id", managerHandler.DeleteEmployee)
+				manager.DELETE("/auditor/delete/:id", managerHandler.DeleteEmployee)
+
+				manager.GET("/employees", managerHandler.ListEmployees)
 
 				// Warehouse Management
 				manager.POST("/warehouse/create", warehouseHandler.Create)
@@ -181,12 +192,12 @@ func main() {
 	}
 
 	log.Println("==========================================")
-	log.Println("🚀 SIMS Backend Starting...")
+	log.Println("🚀 SafeWare Backend Starting...")
 	log.Printf("📊 Database: MongoDB Atlas")
 	log.Printf("🌐 Server running on port %s", port)
 	log.Printf("✅ API available at: http://localhost:%s/api/v1", port)
 	log.Printf("💚 Health check: http://localhost:%s/health", port)
-	log.Printf("📝 Total endpoints: 27")
+	log.Printf("📝 Total endpoints: 33")
 	log.Println("==========================================")
 
 	if err := router.Run(":" + port); err != nil {

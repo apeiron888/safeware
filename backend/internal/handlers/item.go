@@ -39,9 +39,11 @@ type UpdateItemRequest struct {
 	Attributes map[string]interface{} `json:"attributes"`
 }
 
-// List returns all items for the user's company
+// List returns all items for the user's company, optionally filtered by warehouse
 func (h *ItemHandler) List(c *gin.Context) {
 	companyID := c.GetString("company_id")
+	warehouseID := c.Param("id")
+
 	if companyID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
@@ -49,28 +51,89 @@ func (h *ItemHandler) List(c *gin.Context) {
 
 	ctx := context.Background()
 	collection := database.GetCollection("items")
+	companyObjID, _ := primitive.ObjectIDFromHex(companyID)
 
-	filter := bson.M{"company_id": companyID, "is_archived": false}
-
-	// Apply filters
-	if classification := c.Query("classification"); classification != "" {
-		filter["classification"] = classification
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.D{{Key: "company_id", Value: companyObjID}, {Key: "is_archived", Value: false}}}},
 	}
-	if search := c.Query("search"); search != "" {
-		filter["$or"] = []bson.M{
-			{"name": bson.M{"$regex": search, "$options": "i"}},
-			{"sku": bson.M{"$regex": search, "$options": "i"}},
+
+	// Lookup locations
+	pipeline = append(pipeline, bson.D{
+		{Key: "$lookup", Value: bson.D{
+			{Key: "from", Value: "item_locations"},
+			{Key: "localField", Value: "_id"},
+			{Key: "foreignField", Value: "item_id"},
+			{Key: "as", Value: "locations"},
+		}},
+	})
+
+	if warehouseID != "" {
+		whObjID, err := primitive.ObjectIDFromHex(warehouseID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid warehouse ID"})
+			return
 		}
+
+		// Filter locations to specific warehouse and sum quantity
+		pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.D{
+			{Key: "quantity", Value: bson.D{
+				{Key: "$sum", Value: bson.D{
+					{Key: "$map", Value: bson.D{
+						{Key: "input", Value: bson.D{
+							{Key: "$filter", Value: bson.D{
+								{Key: "input", Value: "$locations"},
+								{Key: "as", Value: "loc"},
+								{Key: "cond", Value: bson.D{{Key: "$eq", Value: bson.A{"$$loc.warehouse_id", whObjID}}}},
+							}},
+						}},
+						{Key: "as", Value: "loc"},
+						{Key: "in", Value: "$$loc.quantity"},
+					}},
+				}},
+			}},
+			{Key: "batch", Value: bson.D{
+				{Key: "$let", Value: bson.D{
+					{Key: "vars", Value: bson.D{
+						{Key: "loc", Value: bson.D{
+							{Key: "$arrayElemAt", Value: bson.A{
+								bson.D{
+									{Key: "$filter", Value: bson.D{
+										{Key: "input", Value: "$locations"},
+										{Key: "as", Value: "loc"},
+										{Key: "cond", Value: bson.D{{Key: "$eq", Value: bson.A{"$$loc.warehouse_id", whObjID}}}},
+									}},
+								},
+								0,
+							}},
+						}},
+					}},
+					{Key: "in", Value: "$$loc.batch"},
+				}},
+			}},
+		}}})
+
+		// Only show items present in this warehouse
+		pipeline = append(pipeline, bson.D{{Key: "$match", Value: bson.D{{Key: "quantity", Value: bson.D{{Key: "$gt", Value: 0}}}}}})
+	} else {
+		// Sum all locations
+		pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.D{
+			{Key: "quantity", Value: bson.D{
+				{Key: "$sum", Value: "$locations.quantity"},
+			}},
+		}}})
 	}
 
-	cursor, err := collection.Find(ctx, filter)
+	// Remove locations array
+	pipeline = append(pipeline, bson.D{{Key: "$project", Value: bson.D{{Key: "locations", Value: 0}}}})
+
+	cursor, err := collection.Aggregate(ctx, pipeline)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch items"})
 		return
 	}
 	defer cursor.Close(ctx)
 
-	var items []models.Item
+	var items []bson.M
 	if err = cursor.All(ctx, &items); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode items"})
 		return

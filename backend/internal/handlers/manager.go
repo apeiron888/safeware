@@ -119,3 +119,123 @@ func (h *ManagerHandler) CreateEmployee(role string) gin.HandlerFunc {
 		})
 	}
 }
+
+// ListEmployees returns all employees for the company
+func (h *ManagerHandler) ListEmployees(c *gin.Context) {
+	companyID := c.GetString("company_id")
+	if companyID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	ctx := context.Background()
+	collection := database.GetCollection("users")
+	companyObjectID, _ := primitive.ObjectIDFromHex(companyID)
+
+	// Find all users for this company, excluding the current user (Manager) if desired,
+	// but usually manager wants to see everyone including other managers?
+	// Let's filter by roles: Supervisor, Staff, Auditor
+	filter := bson.M{
+		"company_id": companyObjectID,
+		"role":       bson.M{"$in": []string{"Supervisor", "Staff", "Auditor"}},
+	}
+
+	cursor, err := collection.Find(ctx, filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch employees"})
+		return
+	}
+	defer cursor.Close(ctx)
+
+	var employees []models.User
+	if err = cursor.All(ctx, &employees); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode employees"})
+		return
+	}
+
+	// Transform to response format if needed, or just return users
+	// We might want to sanitize password hashes
+	for i := range employees {
+		employees[i].PasswordHash = ""
+	}
+
+	c.JSON(http.StatusOK, employees)
+}
+
+type UpdateEmployeeRequest struct {
+	FullName    string `json:"full_name"`
+	Email       string `json:"email"`
+	WarehouseID string `json:"warehouse_id"`
+}
+
+// UpdateEmployee handles updating employee details
+func (h *ManagerHandler) UpdateEmployee(c *gin.Context) {
+	companyID := c.GetString("company_id")
+	employeeID := c.Param("id")
+
+	var req UpdateEmployeeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	employeeObjectID, err := primitive.ObjectIDFromHex(employeeID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid employee ID"})
+		return
+	}
+
+	companyObjectID, _ := primitive.ObjectIDFromHex(companyID)
+
+	ctx := context.Background()
+	usersCollection := database.GetCollection("users")
+
+	// Build update document
+	update := bson.M{"$set": bson.M{"updated_at": time.Now()}}
+	if req.FullName != "" {
+		update["$set"].(bson.M)["full_name"] = req.FullName
+	}
+	if req.Email != "" {
+		update["$set"].(bson.M)["email"] = req.Email
+	}
+	if req.WarehouseID != "" {
+		warehouseObjID, err := primitive.ObjectIDFromHex(req.WarehouseID)
+		if err == nil {
+			update["$set"].(bson.M)["warehouse_id"] = warehouseObjID
+		}
+	}
+
+	result, err := usersCollection.UpdateOne(ctx, bson.M{"_id": employeeObjectID, "company_id": companyObjectID}, update)
+	if err != nil || result.MatchedCount == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Employee not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Employee updated successfully"})
+}
+
+// DeleteEmployee handles employee deletion
+func (h *ManagerHandler) DeleteEmployee(c *gin.Context) {
+	companyID := c.GetString("company_id")
+	employeeID := c.Param("id")
+
+	employeeObjectID, err := primitive.ObjectIDFromHex(employeeID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid employee ID"})
+		return
+	}
+
+	companyObjectID, _ := primitive.ObjectIDFromHex(companyID)
+
+	ctx := context.Background()
+	usersCollection := database.GetCollection("users")
+
+	// Delete the employee
+	result, err := usersCollection.DeleteOne(ctx, bson.M{"_id": employeeObjectID, "company_id": companyObjectID})
+	if err != nil || result.DeletedCount == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Employee not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Employee deleted successfully"})
+}

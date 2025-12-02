@@ -165,7 +165,7 @@ func (h *WarehouseHandler) Update(c *gin.Context) {
 	ctx := context.Background()
 	collection := database.GetCollection("warehouses")
 
-	result, err := collection.UpdateOne(ctx, bson.M{" _id": objectID, "company_id": companyObjectID}, update)
+	result, err := collection.UpdateOne(ctx, bson.M{"_id": objectID, "company_id": companyObjectID}, update)
 	if err != nil || result.MatchedCount == 0 {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Warehouse not found"})
 		return

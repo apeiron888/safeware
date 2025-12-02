@@ -52,7 +52,7 @@ func (e *EmailService) SendVerificationEmail(to, token string) error {
 	<html>
 	<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
 		<div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-			<h2 style="color: #0ea5e9;">Welcome to SIMS!</h2>
+			<h2 style="color: #0ea5e9;">Welcome to SafeWare!</h2>
 			<p>Thank you for registering. Please verify your email address by clicking the button below:</p>
 			<div style="margin: 30px 0;">
 				<a href="{{.VerifyURL}}" style="background-color: #0ea5e9; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">Verify Email</a>
@@ -71,7 +71,7 @@ func (e *EmailService) SendVerificationEmail(to, token string) error {
 		return err
 	}
 
-	return e.SendEmail(to, "Verify your SIMS account", body.String())
+	return e.SendEmail(to, "Verify your SafeWare account", body.String())
 }
 
 func (e *EmailService) SendPasswordResetEmail(to, token string) error {
@@ -100,5 +100,5 @@ func (e *EmailService) SendPasswordResetEmail(to, token string) error {
 		return err
 	}
 
-	return e.SendEmail(to, "Reset your SIMS password", body.String())
+	return e.SendEmail(to, "Reset your SafeWare password", body.String())
 }
