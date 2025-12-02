@@ -59,7 +59,7 @@ const Login: React.FC = () => {
             <div className="max-w-md w-full space-y-8 bg-white dark:bg-dark-surface p-8 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700">
                 <div>
                     <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">
-                        Sign in to <span className="text-primary-600">Vaultory</span>
+                        Sign in to <span className="text-primary-600">SafeWare</span>
                     </h2>
                     <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
                         Secure Inventory Management System
@@ -71,7 +71,6 @@ const Login: React.FC = () => {
                             <label htmlFor="email" className="sr-only">Email address</label>
                             <input
                                 id="email"
-                                name="email"
                                 type="email"
                                 autoComplete="email"
                                 required
@@ -87,7 +86,6 @@ const Login: React.FC = () => {
                             <label htmlFor="password" className="sr-only">Password</label>
                             <input
                                 id="password"
-                                name="password"
                                 type="password"
                                 autoComplete="current-password"
                                 required

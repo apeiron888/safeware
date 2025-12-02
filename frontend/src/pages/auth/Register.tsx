@@ -44,7 +44,7 @@ const Register: React.FC = () => {
                         Register Company
                     </h2>
                     <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
-                        Create a new Vaultory account for your organization
+                        Create a new SafeWare account for your organization
                     </p>
                 </div>
                 <form className="mt-8 space-y-6" onSubmit={formik.handleSubmit}>
