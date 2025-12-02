@@ -1,10 +1,9 @@
 services:
   - type: web
     name: safeware-backend
-    env: go
+    env: docker
     region: oregon
-    buildCommand: go build -o bin/server ./cmd/server
-    startCommand: ./bin/server
+    dockerfilePath: ./Dockerfile
     envVars:
       - key: MONGODB_URI
         sync: false
