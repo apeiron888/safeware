@@ -66,7 +66,7 @@ func main() {
 	router.Use(func(c *gin.Context) {
 		// Get the origin from the request
 		origin := c.Request.Header.Get("Origin")
-		origin = "*"
+
 		// If no origin header (e.g. server-to-server), default to * or skip
 		if origin == "" {
 			origin = "*"
