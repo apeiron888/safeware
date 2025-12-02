@@ -8,27 +8,49 @@ import EmptyState from '../../components/common/EmptyState';
 import { HiArrowLeft } from 'react-icons/hi';
 import { toast } from 'react-toastify';
 
+interface Warehouse {
+    id: string;
+    name: string;
+    location: string;
+}
+
 const AuditorWarehouseDetails: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const [items, setItems] = useState<Item[]>([]);
+    const [warehouse, setWarehouse] = useState<Warehouse | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const fetchItems = async () => {
+        const fetchData = async () => {
             try {
-                const res = await api.get(`/auditor/items/warehouse/${id}`);
-                setItems(res.data || []);
+                // Fetch warehouse details and items
+                const [warehousesRes, itemsRes] = await Promise.all([
+                    api.get('/auditor/warehouses'),
+                    api.get(`/auditor/items/warehouse/${id}`)
+                ]);
+
+                // Extract warehouses array from response
+                const warehousesData = warehousesRes.data.warehouses || warehousesRes.data;
+                const warehousesList = Array.isArray(warehousesData) ? warehousesData : [];
+
+                // Find the specific warehouse
+                const warehouseData = warehousesList.find((w: Warehouse) => w.id === id);
+                setWarehouse(warehouseData || null);
+
+                // Extract items array from response
+                const itemsData = itemsRes.data.items || itemsRes.data;
+                setItems(Array.isArray(itemsData) ? itemsData : []);
             } catch (error) {
-                console.error('Failed to fetch warehouse items', error);
-                toast.error('Failed to load warehouse items');
+                console.error('Failed to fetch warehouse details', error);
+                toast.error('Failed to load warehouse details');
             } finally {
                 setLoading(false);
             }
         };
 
         if (id) {
-            fetchItems();
+            fetchData();
         }
     }, [id]);
 
@@ -51,7 +73,16 @@ const AuditorWarehouseDetails: React.FC = () => {
                     <HiArrowLeft className="mr-2" />
                     Back to Warehouses
                 </button>
-                <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Warehouse Items (Read-Only)</h1>
+                <div>
+                    <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                        {warehouse ? warehouse.name : 'Warehouse Items'} (Read-Only)
+                    </h1>
+                    {warehouse && (
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                            {warehouse.location}
+                        </p>
+                    )}
+                </div>
             </div>
 
             {/* Items Grid */}

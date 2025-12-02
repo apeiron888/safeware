@@ -22,10 +22,12 @@ const SupervisorDashboard: React.FC = () => {
     const fetchItems = async () => {
         try {
             const res = await api.get('/supervisor/items');
-            setItems(res.data || []);
+            const itemsData = res.data.items || res.data;
+            setItems(Array.isArray(itemsData) ? itemsData : []);
         } catch (error) {
             console.error('Failed to fetch items', error);
             toast.error('Failed to load items');
+            setItems([]);
         } finally {
             setLoading(false);
         }
@@ -37,18 +39,20 @@ const SupervisorDashboard: React.FC = () => {
 
     const formik = useFormik({
         initialValues: {
+            sku: '',
             name: '',
-            category: '',
+            quality: 'New',
             quantity: 0,
             price: 0,
-            description: '',
+            department: '',
         },
         validationSchema: Yup.object({
+            sku: Yup.string().required('Required'),
             name: Yup.string().required('Required'),
-            category: Yup.string().required('Required'),
+            quality: Yup.string().required('Required'),
             quantity: Yup.number().min(0, 'Must be positive').required('Required'),
             price: Yup.number().min(0, 'Must be positive').required('Required'),
-            description: Yup.string(),
+            department: Yup.string(),
         }),
         onSubmit: async (values) => {
             try {
@@ -72,11 +76,12 @@ const SupervisorDashboard: React.FC = () => {
     const handleEdit = (item: Item) => {
         setEditingItem(item);
         formik.setValues({
+            sku: item.sku || '',
             name: item.name,
-            category: item.category,
+            quality: item.quality || 'New',
             quantity: item.quantity,
             price: item.price,
-            description: item.description || '',
+            department: item.department || '',
         });
         setIsModalOpen(true);
     };
@@ -162,6 +167,18 @@ const SupervisorDashboard: React.FC = () => {
 
                         <form onSubmit={formik.handleSubmit} className="space-y-4">
                             <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">SKU</label>
+                                <input
+                                    type="text"
+                                    {...formik.getFieldProps('sku')}
+                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                />
+                                {formik.touched.sku && formik.errors.sku && (
+                                    <div className="text-red-500 text-xs mt-1">{formik.errors.sku}</div>
+                                )}
+                            </div>
+
+                            <div>
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
                                 <input
                                     type="text"
@@ -174,14 +191,17 @@ const SupervisorDashboard: React.FC = () => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Category</label>
-                                <input
-                                    type="text"
-                                    {...formik.getFieldProps('category')}
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Quality</label>
+                                <select
+                                    {...formik.getFieldProps('quality')}
                                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                />
-                                {formik.touched.category && formik.errors.category && (
-                                    <div className="text-red-500 text-xs mt-1">{formik.errors.category}</div>
+                                >
+                                    <option value="New">New</option>
+                                    <option value="Used">Used</option>
+                                    <option value="Damaged">Damaged</option>
+                                </select>
+                                {formik.touched.quality && formik.errors.quality && (
+                                    <div className="text-red-500 text-xs mt-1">{formik.errors.quality}</div>
                                 )}
                             </div>
 
@@ -213,10 +233,10 @@ const SupervisorDashboard: React.FC = () => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Description (Optional)</label>
-                                <textarea
-                                    {...formik.getFieldProps('description')}
-                                    rows={3}
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Department (Optional)</label>
+                                <input
+                                    type="text"
+                                    {...formik.getFieldProps('department')}
                                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                 />
                             </div>

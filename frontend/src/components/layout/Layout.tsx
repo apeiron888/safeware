@@ -33,6 +33,7 @@ const Layout: React.FC = () => {
     const navigation = [
         { name: 'Dashboard', href: `/${user?.role?.toLowerCase()}/dashboard`, icon: HiHome, roles: ['Manager', 'Supervisor', 'Staff', 'Auditor'] },
         { name: 'Employees', href: '/manager/employees', icon: HiUsers, roles: ['Manager'] },
+        { name: 'Employees', href: '/supervisor/employees', icon: HiUsers, roles: ['Supervisor'] },
         { name: 'Warehouses', href: '/manager/warehouses', icon: HiOfficeBuilding, roles: ['Manager'] },
         { name: 'Audit Logs', href: '/manager/logs', icon: HiClipboardList, roles: ['Manager'] },
         { name: 'Warehouses', href: '/auditor/warehouses', icon: HiOfficeBuilding, roles: ['Auditor'] },

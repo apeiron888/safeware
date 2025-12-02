@@ -14,6 +14,7 @@ import Warehouses from './pages/manager/Warehouses';
 import WarehouseDetails from './pages/manager/WarehouseDetails';
 import AuditLogs from './pages/manager/AuditLogs';
 import SupervisorDashboard from './pages/supervisor/Dashboard';
+import SupervisorEmployees from './pages/supervisor/Employees';
 import StaffDashboard from './pages/staff/Dashboard';
 import AuditorDashboard from './pages/auditor/Dashboard';
 import AuditorWarehouses from './pages/auditor/Warehouses';
@@ -56,6 +57,7 @@ function App() {
 
                         {/* Supervisor Routes */}
                         <Route path="/supervisor/dashboard" element={<ProtectedRoute roles={['Supervisor']}><SupervisorDashboard /></ProtectedRoute>} />
+                        <Route path="/supervisor/employees" element={<ProtectedRoute roles={['Supervisor']}><SupervisorEmployees /></ProtectedRoute>} />
 
                         {/* Staff Routes */}
                         <Route path="/staff/dashboard" element={<ProtectedRoute roles={['Staff']}><StaffDashboard /></ProtectedRoute>} />

@@ -16,10 +16,12 @@ const AuditorWarehouses: React.FC = () => {
         const fetchWarehouses = async () => {
             try {
                 const res = await api.get('/auditor/warehouses');
-                setWarehouses(res.data || []);
+                const warehousesData = res.data.warehouses || res.data;
+                setWarehouses(Array.isArray(warehousesData) ? warehousesData : []);
             } catch (error) {
                 console.error('Failed to fetch warehouses', error);
                 toast.error('Failed to load warehouses');
+                setWarehouses([]);
             } finally {
                 setLoading(false);
             }
